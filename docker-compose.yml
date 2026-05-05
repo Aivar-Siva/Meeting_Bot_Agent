@@ -38,6 +38,7 @@ services:
       - DJANGO_SECRET_KEY=${ATTENDEE_SECRET_KEY}
       - ALLOWED_HOSTS=localhost,attendee-app,${EC2_PUBLIC_IP}
       - DJANGO_ALLOWED_HOSTS=*
+      - CREDENTIALS_ENCRYPTION_KEY=${CREDENTIALS_ENCRYPTION_KEY}
     command: python manage.py runserver 0.0.0.0:8000
     entrypoint: []
     depends_on:
@@ -57,6 +58,7 @@ services:
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
       - ENABLE_CHROME_SANDBOX=false
       - DJANGO_SECRET_KEY=${ATTENDEE_SECRET_KEY}
+      - CREDENTIALS_ENCRYPTION_KEY=${CREDENTIALS_ENCRYPTION_KEY}
     command: celery -A attendee worker -l INFO
     depends_on:
       - attendee-postgres
