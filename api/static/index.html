@@ -222,6 +222,7 @@ async function loadMeetings() {
 
 function populateDropdowns() {
   const sel = document.getElementById('insights-meeting-id');
+  const current = sel.value;
   if (!apiMeetings.length) {
     sel.innerHTML = '<option value="">No meetings yet</option>';
     return;
@@ -229,9 +230,18 @@ function populateDropdowns() {
   sel.innerHTML = apiMeetings.map(m =>
     `<option value="${m.meeting_id}">${m.bot_name} — ${m.meeting_id} (${m.status})</option>`
   ).join('');
+  // Restore selection if still valid
+  if (current && apiMeetings.find(m => m.meeting_id === current)) sel.value = current;
 }
 
-function syncInsightsId() {} // dropdown value used directly
+// Auto-refresh meetings every 10s
+setInterval(loadMeetings, 10000);
+
+function syncInsightsId() {
+  // Hide old insights when user picks a different meeting
+  document.getElementById('insights-result').style.display = 'none';
+  setMsg('insights-msg', '', '');
+}
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));

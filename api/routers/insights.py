@@ -20,6 +20,8 @@ def get_insights(meeting_id: str, db: Session = Depends(get_db)):
 @router.post("/{meeting_id}/insights/generate")
 async def trigger_insights(meeting_id: str, background_tasks: BackgroundTasks):
     transcript = attendee.get_transcript(meeting_id)
+    if not transcript:
+        return {"status": "no_transcript"}
     background_tasks.add_task(_run_pipeline, meeting_id, transcript)
     return {"status": "processing"}
 
