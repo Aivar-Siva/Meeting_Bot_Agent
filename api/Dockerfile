@@ -1,6 +1,8 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+
+# Install only what's needed, skip torch/CUDA
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

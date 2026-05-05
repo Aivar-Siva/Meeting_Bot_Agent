@@ -44,7 +44,7 @@ services:
       - botnet
 
   attendee-worker:
-    build: ./attendee
+    image: meeting_bot_agent-attendee-app
     container_name: attendee-worker
     restart: unless-stopped
     environment:
@@ -60,7 +60,7 @@ services:
       - botnet
 
   attendee-webpage-streamer:
-    build: ./attendee
+    image: meeting_bot_agent-attendee-app
     container_name: attendee-webpage-streamer
     restart: unless-stopped
     ports:
@@ -102,6 +102,7 @@ services:
       - BEDROCK_LAMBDA_URL=${BEDROCK_LAMBDA_URL}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - EC2_PUBLIC_IP=${EC2_PUBLIC_IP}
+      - LM_STUDIO_URL=${LM_STUDIO_URL}
     depends_on:
       - attendee-app
       - qdrant

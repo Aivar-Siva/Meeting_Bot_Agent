@@ -1,22 +1,22 @@
 import os
+import httpx
 from datetime import datetime
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, Range
-from sentence_transformers import SentenceTransformer
 import uuid
 
 COLLECTION = "transcripts"
-VECTOR_DIM = 384
+VECTOR_DIM = 384  # update if your LM Studio model uses different dims
+
+LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://10.237.26.127:1234")
 
 _client = None
-_model = None
 
 
 def _get_client():
     global _client
     if _client is None:
         _client = QdrantClient(url=os.environ.get("QDRANT_URL", "http://localhost:6333"))
-        # Create collection if not exists
         existing = [c.name for c in _client.get_collections().collections]
         if COLLECTION not in existing:
             _client.create_collection(COLLECTION, vectors_config=VectorParams(
@@ -25,22 +25,21 @@ def _get_client():
     return _client
 
 
-def _get_model():
-    global _model
-    if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _model
-
-
-def _embed(text: str) -> list:
-    return _get_model().encode(text).tolist()
+async def _embed(text: str) -> list:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{LM_STUDIO_URL}/v1/embeddings", json={
+            "model": "text-embedding-all-minilm-l6-v2-embedding",
+            "input": text
+        })
+        r.raise_for_status()
+        return r.json()["data"][0]["embedding"]
 
 
 async def index_transcript(meeting_id: str, transcript: list, meeting_date: str = None):
     client = _get_client()
     date = meeting_date or datetime.utcnow().strftime("%Y-%m-%d")
 
-    # Chunk transcript into ~200-word pieces
+    # Group consecutive utterances by speaker into chunks
     chunks, current, current_speaker = [], [], None
     for item in transcript:
         speaker = item.get("speaker_name", "Unknown")
@@ -55,26 +54,29 @@ async def index_transcript(meeting_id: str, transcript: list, meeting_date: str 
     if current:
         chunks.append({"speaker": current_speaker, "text": " ".join(current)})
 
-    points = [
-        PointStruct(
+    points = []
+    for c in chunks:
+        if not c["text"]:
+            continue
+        vector = await _embed(c["text"])
+        points.append(PointStruct(
             id=str(uuid.uuid4()),
-            vector=_embed(c["text"]),
+            vector=vector,
             payload={
                 "meeting_id": meeting_id,
                 "speaker": c["speaker"],
                 "text": c["text"],
                 "meeting_date": date,
             }
-        )
-        for c in chunks if c["text"]
-    ]
+        ))
+
     if points:
         client.upsert(collection_name=COLLECTION, points=points)
 
 
 async def search_transcripts(query: str, from_date: str = None, speaker: str = None, top_k: int = 5) -> list:
     client = _get_client()
-    vector = _embed(query)
+    vector = await _embed(query)
 
     conditions = []
     if from_date:
