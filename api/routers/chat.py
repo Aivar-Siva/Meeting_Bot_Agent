@@ -20,16 +20,15 @@ class ChatRequest(BaseModel):
     meeting_id: Optional[str] = None
 
 
-async def _get_context(query: str, meeting_id: str = None) -> str:
+async def _get_context(query: str, meeting_id: str = None):
     """Fetch relevant transcript chunks from Qdrant for context."""
     try:
         from services.vector_store import search_transcripts
         chunks = await search_transcripts(query, top_k=3)
-        if not chunks:
-            return ""
-        return "\n".join(f"[{c['speaker']}]: {c['text']}" for c in chunks)
+        context = "\n".join(f"[{c['speaker']}]: {c['text']}" for c in chunks) if chunks else ""
+        return context, chunks
     except Exception:
-        return ""
+        return "", []
 
 
 def _build_prompt(messages: List[Message], context: str) -> str:
@@ -49,7 +48,7 @@ def _build_prompt(messages: List[Message], context: str) -> str:
 async def chat(req: ChatRequest):
     # Get context from Qdrant using the latest user message
     last_user_msg = next((m.content for m in reversed(req.messages) if m.role == "user"), "")
-    context = await _get_context(last_user_msg, req.meeting_id)
+    context, chunks = await _get_context(last_user_msg, req.meeting_id)
     prompt = _build_prompt(req.messages, context)
 
     async def stream():
