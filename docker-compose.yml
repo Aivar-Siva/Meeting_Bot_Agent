@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  attendee:
+    image: ghcr.io/attendee-labs/attendee:latest
+    container_name: attendee
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://meetingbot:MeetingBot2026!@${RDS_ENDPOINT}/meetingbot
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - DEEPGRAM_TRANSCRIPTION_CALLBACK_URL=http://${EC2_PUBLIC_IP}:8000/deepgram/callback
+      - SECRET_KEY=${ATTENDEE_SECRET_KEY}
+      - DJANGO_ALLOWED_HOSTS=*
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  fastapi:
+    build: ./api
+    container_name: fastapi
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://meetingbot:MeetingBot2026!@${RDS_ENDPOINT}/meetingbot
+      - ATTENDEE_BASE_URL=http://attendee:8080
+      - ATTENDEE_API_KEY=${ATTENDEE_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+      - BEDROCK_LAMBDA_URL=${BEDROCK_LAMBDA_URL}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - EC2_PUBLIC_IP=${EC2_PUBLIC_IP}
+    depends_on:
+      - attendee
+      - qdrant
+
+volumes:
+  qdrant_data:
