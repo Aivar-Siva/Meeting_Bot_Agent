@@ -14,6 +14,6 @@ async def search(q: str, from_date: str = None, speaker: str = None):
     context = "\n".join(
         f"[{c['meeting_date']} - {c['speaker']}]: {c['text']}" for c in chunks
     )
-    prompt = f"Answer this question using only the meeting transcript excerpts below. Be concise.\n\nQuestion: {q}\n\nExcerpts:\n{context}\n\nAnswer:"
-    answer = await chat(prompt)
+    prompt = f"Answer in 2-3 sentences maximum. Be direct and concise.\n\nQuestion: {q}\n\nMeeting excerpts:\n{context}\n\nAnswer:"
+    answer = await chat(prompt, max_tokens=150)
     return {"answer": answer, "sources": chunks}
