@@ -32,9 +32,18 @@ async def generate_insights(meeting_id: str, transcript: list) -> dict:
     prompt = PROMPT_TEMPLATE.format(transcript=formatted)
     raw = await chat_insights(prompt)
 
-    # Extract JSON from response
+    # Extract JSON - find outermost { } block
     start = raw.find("{")
-    end = raw.rfind("}") + 1
+    # Find matching closing brace
+    depth, end = 0, -1
+    for i, ch in enumerate(raw[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
     data = json.loads(raw[start:end])
 
     return {
