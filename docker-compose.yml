@@ -1,7 +1,29 @@
 version: "3.9"
 
 services:
-  # ── Attendee (built from source) ──────────────────────────────
+  # ── Attendee's own Postgres (matches dev hardcoded creds) ─────
+  attendee-postgres:
+    image: postgres:15.3-alpine
+    container_name: attendee-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: attendee_development
+      POSTGRES_USER: attendee_development_user
+      POSTGRES_PASSWORD: attendee_development_user
+    volumes:
+      - attendee_pg:/data/postgres
+    networks:
+      - botnet
+
+  # ── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    networks:
+      - botnet
+
+  # ── Attendee app ──────────────────────────────────────────────
   attendee-app:
     build: ./attendee
     container_name: attendee-app
@@ -9,16 +31,14 @@ services:
     ports:
       - "8080:8000"
     environment:
-      - POSTGRES_HOST=${RDS_ENDPOINT}
-      - POSTGRES_DB=meetingbot
-      - POSTGRES_USER=meetingbot
-      - POSTGRES_PASSWORD=MeetingBot2026!
+      - POSTGRES_HOST=attendee-postgres
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
       - ENABLE_CHROME_SANDBOX=false
     command: python manage.py runserver 0.0.0.0:8000
     entrypoint: []
     depends_on:
+      - attendee-postgres
       - redis
     networks:
       - botnet
@@ -28,15 +48,13 @@ services:
     container_name: attendee-worker
     restart: unless-stopped
     environment:
-      - POSTGRES_HOST=${RDS_ENDPOINT}
-      - POSTGRES_DB=meetingbot
-      - POSTGRES_USER=meetingbot
-      - POSTGRES_PASSWORD=MeetingBot2026!
+      - POSTGRES_HOST=attendee-postgres
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
       - ENABLE_CHROME_SANDBOX=false
     command: celery -A attendee worker -l INFO
     depends_on:
+      - attendee-postgres
       - redis
     networks:
       - botnet
@@ -55,14 +73,6 @@ services:
     networks:
       - botnet
 
-  # ── Redis ─────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    restart: unless-stopped
-    networks:
-      - botnet
-
   # ── Qdrant ────────────────────────────────────────────────────
   qdrant:
     image: qdrant/qdrant:latest
@@ -75,7 +85,7 @@ services:
     networks:
       - botnet
 
-  # ── FastAPI ───────────────────────────────────────────────────
+  # ── FastAPI (uses RDS for our data) ───────────────────────────
   fastapi:
     build:
       context: .
@@ -103,4 +113,5 @@ networks:
     driver: bridge
 
 volumes:
+  attendee_pg:
   qdrant_data:
