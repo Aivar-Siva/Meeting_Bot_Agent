@@ -27,6 +27,15 @@ async def schedule(req: ScheduleRequest, background_tasks: BackgroundTasks, db: 
     return {"meeting_id": bot["id"], "status": "joining"}
 
 
+@router.get("")
+def list_meetings(db: Session = Depends(get_db)):
+    meetings = db.query(Meeting).order_by(Meeting.created_at.desc()).all()
+    return [{"meeting_id": m.id, "meeting_url": m.meeting_url,
+             "bot_name": m.bot_name, "status": m.status,
+             "created_at": m.created_at.isoformat() if m.created_at else None}
+            for m in meetings]
+
+
 @router.get("/{meeting_id}")
 def get_meeting(meeting_id: str, db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()

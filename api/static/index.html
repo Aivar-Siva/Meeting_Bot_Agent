@@ -125,8 +125,10 @@
     <h2>Post-Call Insights</h2>
     <div class="form-row">
       <div class="form-group">
-        <label>Meeting ID</label>
-        <input id="insights-meeting-id" type="text" placeholder="bot_xxxxxxxxxxxxxxxx" />
+        <label>Select Meeting</label>
+        <select id="insights-meeting-id" onchange="syncInsightsId()">
+          <option value="">Loading meetings...</option>
+        </select>
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;gap:8px">
         <button class="btn" onclick="loadInsights()">Load Insights</button>
@@ -206,8 +208,192 @@
 
 <script>
 const API = '';
-let meetings = JSON.parse(localStorage.getItem('meetings') || '[]');
 let ws = null;
+let apiMeetings = [];
+
+async function loadMeetings() {
+  try {
+    const r = await fetch(`${API}/meetings`);
+    apiMeetings = await r.json();
+    renderMeetings();
+    populateDropdowns();
+  } catch(e) {}
+}
+
+function populateDropdowns() {
+  const sel = document.getElementById('insights-meeting-id');
+  if (!apiMeetings.length) {
+    sel.innerHTML = '<option value="">No meetings yet</option>';
+    return;
+  }
+  sel.innerHTML = apiMeetings.map(m =>
+    `<option value="${m.meeting_id}">${m.bot_name} — ${m.meeting_id} (${m.status})</option>`
+  ).join('');
+}
+
+function syncInsightsId() {} // dropdown value used directly
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'schedule') renderMeetings();
+  if (name === 'insights') { loadMeetings(); }
+}
+
+function renderMeetings() {
+  const list = document.getElementById('meeting-list');
+  if (!apiMeetings.length) { list.innerHTML = '<li style="color:#94a3b8;font-size:13px">No meetings yet</li>'; return; }
+  list.innerHTML = apiMeetings.map(m => `
+    <li class="meeting-item">
+      <div class="info">
+        <div class="id">${m.meeting_id}</div>
+        <div class="url">${m.meeting_url}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline" style="font-size:12px;padding:6px 12px"
+          onclick="goToInsights('${m.meeting_id}')">Insights</button>
+      </div>
+    </li>`).join('');
+}
+
+function goToInsights(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-insights').classList.add('active');
+  document.querySelectorAll('nav button')[1].classList.add('active');
+  loadMeetings().then(() => {
+    document.getElementById('insights-meeting-id').value = id;
+  });
+}
+
+async function scheduleBot() {
+  const url = document.getElementById('meeting-url').value.trim();
+  const name = document.getElementById('bot-name').value.trim() || 'Meeting Bot';
+  if (!url) { setMsg('schedule-msg', 'Please enter a meeting URL', 'error'); return; }
+
+  setMsg('schedule-msg', '<span class="spinner"></span>Joining meeting...', '');
+  try {
+    const r = await fetch(`${API}/meetings/schedule`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({meeting_url: url, bot_name: name})
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(JSON.stringify(data));
+    setMsg('schedule-msg', `✅ Bot scheduled! Meeting ID: ${data.meeting_id}`, 'success');
+    connectLive(data.meeting_id);
+    loadMeetings();
+  } catch(e) {
+    setMsg('schedule-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+function connectLive(botId) {
+  document.getElementById('live-card').style.display = 'block';
+  document.getElementById('live-bot-id').textContent = botId;
+  const log = document.getElementById('ws-log');
+  log.innerHTML = '';
+  if (ws) ws.close();
+  const wsUrl = `ws://${location.host}/ws/meetings/${botId}/live`;
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => appendLog(log, '🟢 Connected to live stream');
+  ws.onmessage = (e) => {
+    const chunk = JSON.parse(e.data);
+    appendLog(log, `<span style="color:#6366f1">${chunk.speaker}:</span> ${chunk.text}`);
+  };
+  ws.onerror = () => appendLog(log, '🔴 WebSocket error');
+  ws.onclose = () => appendLog(log, '⚪ Disconnected');
+}
+
+function appendLog(el, msg) {
+  el.innerHTML += `<div>${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function loadInsights() {
+  const id = document.getElementById('insights-meeting-id').value;
+  if (!id) { setMsg('insights-msg', 'Select a meeting', 'error'); return; }
+  setMsg('insights-msg', '<span class="spinner"></span>Loading...', '');
+  try {
+    const r = await fetch(`${API}/meetings/${id}/insights`);
+    const data = await r.json();
+    if (data.status === 'not_ready') {
+      setMsg('insights-msg', 'Insights not ready. Click Generate to create them.', 'error');
+      return;
+    }
+    renderInsights(data);
+    setMsg('insights-msg', '', '');
+  } catch(e) {
+    setMsg('insights-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+async function generateInsights() {
+  const id = document.getElementById('insights-meeting-id').value;
+  if (!id) { setMsg('insights-msg', 'Select a meeting', 'error'); return; }
+  setMsg('insights-msg', '<span class="spinner"></span>Generating insights with AI... (may take 30s)', '');
+  try {
+    await fetch(`${API}/meetings/${id}/insights/generate`, {method: 'POST'});
+    setMsg('insights-msg', '⏳ Processing... Click Load Insights in 30 seconds.', 'success');
+  } catch(e) {
+    setMsg('insights-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+function renderInsights(d) {
+  document.getElementById('insights-result').style.display = 'block';
+  document.getElementById('ins-summary').textContent = d.summary || 'N/A';
+  document.getElementById('ins-decisions').innerHTML = (d.key_decisions || [])
+    .map(dec => `<div class="tag">✓ ${dec}</div>`).join('') || '<span style="color:#94a3b8;font-size:13px">None</span>';
+  document.getElementById('ins-actions').innerHTML = (d.action_items || [])
+    .map(a => `<div class="action-item"><span class="owner">${a.owner}</span>: ${a.task}${a.due_date ? ` <span style="color:#94a3b8">(${a.due_date})</span>` : ''}</div>`).join('') || '<span style="color:#94a3b8;font-size:13px">None</span>';
+  document.getElementById('ins-topics').innerHTML = (d.topics || [])
+    .map(t => `<span class="tag">${t}</span>`).join('');
+  document.getElementById('ins-risks').innerHTML = (d.risks || [])
+    .map(r => `<div class="risk">⚠ ${r}</div>`).join('') || '<span style="color:#94a3b8;font-size:13px">None</span>';
+  const sent = d.sentiment || {};
+  const overall = sent.overall || 'neutral';
+  document.getElementById('ins-sentiment').innerHTML =
+    `<div class="sentiment-item"><span class="name">Overall </span><span class="val ${overall}">${overall}</span></div>` +
+    Object.entries(sent.per_speaker || {}).map(([name, val]) =>
+      `<div class="sentiment-item"><span class="name">${name} </span><span class="val ${val}">${val}</span></div>`
+    ).join('');
+}
+
+async function search() {
+  const q = document.getElementById('search-query').value.trim();
+  if (!q) { setMsg('search-msg', 'Enter a search query', 'error'); return; }
+  const date = document.getElementById('search-date').value;
+  const speaker = document.getElementById('search-speaker').value.trim();
+  setMsg('search-msg', '<span class="spinner"></span>Searching...', '');
+  let url = `${API}/search?q=${encodeURIComponent(q)}`;
+  if (date) url += `&from_date=${date}`;
+  if (speaker) url += `&speaker=${encodeURIComponent(speaker)}`;
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    document.getElementById('search-result').style.display = 'block';
+    document.getElementById('search-answer').textContent = data.answer || 'No answer found.';
+    document.getElementById('search-sources').innerHTML = (data.sources || []).map(s => `
+      <div class="search-result">
+        <div class="meta">📅 ${s.meeting_date || 'Unknown'} &nbsp;·&nbsp; 🎤 ${s.speaker || 'Unknown'} &nbsp;·&nbsp; 🆔 ${s.meeting_id || ''}</div>
+        <div class="excerpt">${s.text}</div>
+      </div>`).join('') || '<div style="color:#94a3b8;font-size:13px">No source excerpts found.</div>';
+    setMsg('search-msg', '', '');
+  } catch(e) {
+    setMsg('search-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+function setMsg(id, msg, type) {
+  const el = document.getElementById(id);
+  el.innerHTML = msg;
+  el.className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+}
+
+loadMeetings();
+</script>
 
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -356,22 +542,6 @@ async function search() {
     document.getElementById('search-result').style.display = 'block';
     document.getElementById('search-answer').textContent = data.answer || 'No answer found.';
     document.getElementById('search-sources').innerHTML = (data.sources || []).map(s => `
-      <div class="search-result">
-        <div class="meta">📅 ${s.meeting_date || 'Unknown date'} &nbsp;·&nbsp; 🎤 ${s.speaker || 'Unknown'} &nbsp;·&nbsp; 🆔 ${s.meeting_id || ''}</div>
-        <div class="excerpt">${s.text}</div>
-      </div>`).join('') || '<div style="color:#94a3b8;font-size:13px">No source excerpts found.</div>';
-    setMsg('search-msg', '', '');
-  } catch(e) {
-    setMsg('search-msg', `Error: ${e.message}`, 'error');
-  }
-}
-
-function setMsg(id, msg, type) {
-  const el = document.getElementById(id);
-  el.innerHTML = msg;
-  el.className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
-}
-
 renderMeetings();
 </script>
 </body>
