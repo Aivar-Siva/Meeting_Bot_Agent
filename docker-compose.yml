@@ -39,6 +39,7 @@ services:
       - ALLOWED_HOSTS=localhost,attendee-app,${EC2_PUBLIC_IP}
       - DJANGO_ALLOWED_HOSTS=*
       - CREDENTIALS_ENCRYPTION_KEY=${CREDENTIALS_ENCRYPTION_KEY}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - ZOOM_CLIENT_ID=${ZOOM_CLIENT_ID}
       - ZOOM_CLIENT_SECRET=${ZOOM_CLIENT_SECRET}
     command: bash /attendee/init_and_run.sh
