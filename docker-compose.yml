@@ -1,21 +1,69 @@
 version: "3.9"
 
 services:
-  attendee:
-    image: ghcr.io/attendee-labs/attendee:latest
-    container_name: attendee
+  # ── Attendee (built from source) ──────────────────────────────
+  attendee-app:
+    build: ./attendee
+    container_name: attendee-app
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8080:8000"
     environment:
-      - DATABASE_URL=postgresql://meetingbot:MeetingBot2026!@${RDS_ENDPOINT}/meetingbot
-      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
-      - DEEPGRAM_TRANSCRIPTION_CALLBACK_URL=http://${EC2_PUBLIC_IP}:8000/deepgram/callback
-      - SECRET_KEY=${ATTENDEE_SECRET_KEY}
-      - DJANGO_ALLOWED_HOSTS=*
+      - POSTGRES_HOST=${RDS_ENDPOINT}
+      - POSTGRES_DB=meetingbot
+      - POSTGRES_USER=meetingbot
+      - POSTGRES_PASSWORD=MeetingBot2026!
+      - REDIS_URL=redis://redis:6379/5
+      - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - ENABLE_CHROME_SANDBOX=false
+    command: python manage.py runserver 0.0.0.0:8000
+    entrypoint: []
     depends_on:
-      - qdrant
+      - redis
+    networks:
+      - botnet
 
+  attendee-worker:
+    build: ./attendee
+    container_name: attendee-worker
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=${RDS_ENDPOINT}
+      - POSTGRES_DB=meetingbot
+      - POSTGRES_USER=meetingbot
+      - POSTGRES_PASSWORD=MeetingBot2026!
+      - REDIS_URL=redis://redis:6379/5
+      - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - ENABLE_CHROME_SANDBOX=false
+    command: celery -A attendee worker -l INFO
+    depends_on:
+      - redis
+    networks:
+      - botnet
+
+  attendee-webpage-streamer:
+    build: ./attendee
+    container_name: attendee-webpage-streamer
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - ENABLE_CHROME_SANDBOX=false
+    command: python bots/webpage_streamer/run_webpage_streamer.py
+    entrypoint: []
+    networks:
+      - botnet
+
+  # ── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    networks:
+      - botnet
+
+  # ── Qdrant ────────────────────────────────────────────────────
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
@@ -24,24 +72,35 @@ services:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
+    networks:
+      - botnet
 
+  # ── FastAPI ───────────────────────────────────────────────────
   fastapi:
-    build: ./api
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     container_name: fastapi
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://meetingbot:MeetingBot2026!@${RDS_ENDPOINT}/meetingbot
-      - ATTENDEE_BASE_URL=http://attendee:8080
+      - ATTENDEE_BASE_URL=http://attendee-app:8000
       - ATTENDEE_API_KEY=${ATTENDEE_API_KEY}
       - QDRANT_URL=http://qdrant:6333
       - BEDROCK_LAMBDA_URL=${BEDROCK_LAMBDA_URL}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - EC2_PUBLIC_IP=${EC2_PUBLIC_IP}
     depends_on:
-      - attendee
+      - attendee-app
       - qdrant
+    networks:
+      - botnet
+
+networks:
+  botnet:
+    driver: bridge
 
 volumes:
   qdrant_data:
