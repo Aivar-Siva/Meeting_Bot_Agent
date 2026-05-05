@@ -6,9 +6,9 @@ from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, Fi
 import uuid
 
 COLLECTION = "transcripts"
-VECTOR_DIM = 384  # update if your LM Studio model uses different dims
+VECTOR_DIM = 1024  # Amazon Titan Embed v2
 
-LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://10.237.26.127:1234")
+LAMBDA_URL = os.environ.get("BEDROCK_LAMBDA_URL", "")
 
 _client = None
 
@@ -22,17 +22,26 @@ def _get_client():
             _client.create_collection(COLLECTION, vectors_config=VectorParams(
                 size=VECTOR_DIM, distance=Distance.COSINE
             ))
+        else:
+            # Recreate if vector size changed (e.g. switching from MiniLM 384 to Titan 1024)
+            info = _client.get_collection(COLLECTION)
+            if info.config.params.vectors.size != VECTOR_DIM:
+                _client.delete_collection(COLLECTION)
+                _client.create_collection(COLLECTION, vectors_config=VectorParams(
+                    size=VECTOR_DIM, distance=Distance.COSINE
+                ))
     return _client
 
 
 async def _embed(text: str) -> list:
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(f"{LM_STUDIO_URL}/v1/embeddings", json={
-            "model": "text-embedding-all-minilm-l6-v2-embedding",
-            "input": text
+        r = await client.post(LAMBDA_URL, json={
+            "model_id": "amazon.titan-embed-text-v2:0",
+            "inputText": text,
+            "stream": False
         })
         r.raise_for_status()
-        return r.json()["data"][0]["embedding"]
+        return r.json()["embedding"]
 
 
 async def index_transcript(meeting_id: str, transcript: list, meeting_date: str = None):
@@ -43,7 +52,7 @@ async def index_transcript(meeting_id: str, transcript: list, meeting_date: str 
     chunks, current, current_speaker = [], [], None
     for item in transcript:
         speaker = item.get("speaker_name", "Unknown")
-        text = item.get("words", "").strip()
+        text = item.get("transcription", {}).get("transcript", "").strip()
         if not text:
             continue
         if speaker != current_speaker and current:
@@ -72,6 +81,8 @@ async def index_transcript(meeting_id: str, transcript: list, meeting_date: str 
 
     if points:
         client.upsert(collection_name=COLLECTION, points=points)
+        return len(points)
+    return 0
 
 
 async def search_transcripts(query: str, from_date: str = None, speaker: str = None, top_k: int = 5) -> list:
