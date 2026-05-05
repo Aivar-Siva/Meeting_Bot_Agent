@@ -14,8 +14,7 @@ class AttendeeClient:
                               "bot_name": bot_name,
                               "transcription_settings": {
                                   "deepgram": {
-                                      "callback": callback_url,
-                                      "callback_method": "POST"
+                                      "callback": callback_url
                                   }
                               }
                           },
