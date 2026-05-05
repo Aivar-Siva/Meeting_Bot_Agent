@@ -44,6 +44,7 @@ services:
       - botnet
 
   attendee-worker:
+    build: ./attendee
     image: meeting_bot_agent-attendee-app
     container_name: attendee-worker
     restart: unless-stopped
@@ -60,6 +61,7 @@ services:
       - botnet
 
   attendee-webpage-streamer:
+    build: ./attendee
     image: meeting_bot_agent-attendee-app
     container_name: attendee-webpage-streamer
     restart: unless-stopped
