@@ -41,7 +41,18 @@ services:
       - CREDENTIALS_ENCRYPTION_KEY=${CREDENTIALS_ENCRYPTION_KEY}
       - ZOOM_CLIENT_ID=${ZOOM_CLIENT_ID}
       - ZOOM_CLIENT_SECRET=${ZOOM_CLIENT_SECRET}
-    command: python manage.py runserver 0.0.0.0:8000
+    command: >
+      bash -c "sleep 3 &&
+      python -c \"
+import os,django; os.environ.setdefault('DJANGO_SETTINGS_MODULE','attendee.settings.development'); django.setup()
+from bots.models import Credentials, Project
+p=Project.objects.first()
+if p:
+    c,_=Credentials.objects.get_or_create(project=p,credential_type=1); c.set_credentials({'api_key':os.environ['DEEPGRAM_API_KEY']})
+    c2,_=Credentials.objects.get_or_create(project=p,credential_type=2); c2.set_credentials({'client_id':os.environ['ZOOM_CLIENT_ID'],'client_secret':os.environ['ZOOM_CLIENT_SECRET']})
+    print('Credentials restored')
+\" 2>/dev/null || true &&
+      python manage.py runserver 0.0.0.0:8000"
     entrypoint: []
     depends_on:
       - attendee-postgres
