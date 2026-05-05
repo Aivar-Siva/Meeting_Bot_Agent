@@ -420,24 +420,27 @@ async function sendChat() {
     typingEl.classList.remove('chat-typing');
     typingEl.textContent = '';
 
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      const lines = decoder.decode(value).split('\n');
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6);
-        if (data === '[DONE]') break;
-        try {
-          const chunk = JSON.parse(data);
-          if (chunk.token) {
-            fullText += chunk.token;
-            typingEl.textContent = fullText;
-            document.getElementById('chat-messages').scrollTop = 999999;
-          }
-          if (chunk.sources) sources = chunk.sources;
-        } catch(e) {}
+    try {
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        const lines = decoder.decode(value).split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6);
+          try {
+            const chunk = JSON.parse(data);
+            if (chunk.token) {
+              fullText += chunk.token;
+              typingEl.textContent = fullText;
+              document.getElementById('chat-messages').scrollTop = 999999;
+            }
+            if (chunk.sources) sources = chunk.sources;
+          } catch(e) {}
+        }
       }
+    } catch(e) {
+      // Stream closed — normal, ignore
     }
 
     // Render source bubbles
