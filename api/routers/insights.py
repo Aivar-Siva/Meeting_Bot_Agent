@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
-from api.db import get_db, Insight
+from api.db import get_db, Insight, SessionLocal
 from services.insights_pipeline import generate_insights
 from services.attendee_client import AttendeeClient
 from services.vector_store import index_transcript
@@ -18,9 +18,7 @@ def get_insights(meeting_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{meeting_id}/insights/generate")
-async def trigger_insights(meeting_id: str, background_tasks: BackgroundTasks,
-                           db: Session = Depends(get_db)):
-    """Called by Attendee webhook when transcription_state = complete."""
+async def trigger_insights(meeting_id: str, background_tasks: BackgroundTasks):
     transcript = attendee.get_transcript(meeting_id)
     background_tasks.add_task(_run_pipeline, meeting_id, transcript)
     return {"status": "processing"}
@@ -29,7 +27,13 @@ async def trigger_insights(meeting_id: str, background_tasks: BackgroundTasks,
 async def _run_pipeline(meeting_id: str, transcript: list):
     insights = await generate_insights(meeting_id, transcript)
     db = SessionLocal()
-    db.merge(Insight(meeting_id=meeting_id, data=insights))
-    db.commit()
-    db.close()
+    try:
+        existing = db.query(Insight).filter(Insight.meeting_id == meeting_id).first()
+        if existing:
+            existing.data = insights
+        else:
+            db.add(Insight(meeting_id=meeting_id, data=insights))
+        db.commit()
+    finally:
+        db.close()
     await index_transcript(meeting_id, transcript)

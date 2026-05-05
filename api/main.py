@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from api.routers import meetings, live, insights, search, webhooks, deepgram
 
 app = FastAPI(title="Meeting Bot API", version="1.0.0")
@@ -9,6 +11,13 @@ app.include_router(insights.router, prefix="/meetings", tags=["insights"])
 app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 app.include_router(deepgram.router, prefix="/deepgram", tags=["deepgram"])
+
+app.mount("/static", StaticFiles(directory="api/static"), name="static")
+
+
+@app.get("/")
+def root():
+    return FileResponse("api/static/index.html")
 
 
 @app.get("/health")

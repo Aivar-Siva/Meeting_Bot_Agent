@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeting Bot Agent</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+  header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 16px 32px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 20px; font-weight: 600; color: #fff; }
+  header span { background: #6366f1; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 99px; }
+  nav { display: flex; gap: 4px; padding: 16px 32px 0; border-bottom: 1px solid #2d3148; background: #1a1d27; }
+  nav button { background: none; border: none; color: #94a3b8; padding: 10px 20px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; transition: all .2s; }
+  nav button.active { color: #6366f1; border-bottom-color: #6366f1; }
+  nav button:hover { color: #e2e8f0; }
+  .page { display: none; padding: 32px; max-width: 900px; margin: 0 auto; }
+  .page.active { display: block; }
+  .card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #fff; }
+  label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+  input, select { width: 100%; background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; outline: none; transition: border .2s; }
+  input:focus, select:focus { border-color: #6366f1; }
+  .btn { background: #6366f1; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; cursor: pointer; transition: background .2s; }
+  .btn:hover { background: #4f46e5; }
+  .btn:disabled { background: #374151; cursor: not-allowed; }
+  .btn-outline { background: none; border: 1px solid #2d3148; color: #94a3b8; }
+  .btn-outline:hover { border-color: #6366f1; color: #6366f1; background: none; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .form-group { margin-bottom: 16px; }
+  .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+  .status-joining { background: #1e3a5f; color: #60a5fa; }
+  .status-in_call { background: #14532d; color: #4ade80; }
+  .status-ended { background: #1f2937; color: #9ca3af; }
+  .transcript-box { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 16px; max-height: 300px; overflow-y: auto; font-size: 13px; line-height: 1.8; }
+  .utterance { margin-bottom: 8px; }
+  .utterance .speaker { color: #6366f1; font-weight: 600; }
+  .utterance .text { color: #e2e8f0; }
+  .live-dot { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .insight-section { margin-bottom: 16px; }
+  .insight-section h3 { font-size: 13px; color: #6366f1; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+  .insight-section p { font-size: 14px; color: #e2e8f0; line-height: 1.6; }
+  .tag { display: inline-block; background: #1e293b; border: 1px solid #2d3148; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: #94a3b8; margin: 3px; }
+  .action-item { background: #0f1117; border-left: 3px solid #6366f1; padding: 10px 14px; border-radius: 0 8px 8px 0; margin-bottom: 8px; font-size: 13px; }
+  .action-item .owner { color: #6366f1; font-weight: 600; }
+  .search-result { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .search-result .meta { font-size: 12px; color: #6366f1; margin-bottom: 6px; }
+  .search-result .excerpt { font-size: 13px; color: #94a3b8; line-height: 1.6; }
+  .answer-box { background: #1e293b; border: 1px solid #6366f1; border-radius: 8px; padding: 16px; margin-bottom: 16px; font-size: 14px; line-height: 1.7; }
+  .meeting-list { list-style: none; }
+  .meeting-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #2d3148; }
+  .meeting-item:last-child { border-bottom: none; }
+  .meeting-item .info { font-size: 13px; }
+  .meeting-item .id { color: #6366f1; font-family: monospace; font-size: 12px; }
+  .meeting-item .url { color: #94a3b8; font-size: 12px; margin-top: 2px; }
+  .meeting-item .actions { display: flex; gap: 8px; }
+  .ws-log { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 12px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; color: #4ade80; }
+  .error { color: #f87171; font-size: 13px; margin-top: 8px; }
+  .success { color: #4ade80; font-size: 13px; margin-top: 8px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #374151; border-top-color: #6366f1; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .risk { background: #1f1010; border-left: 3px solid #f87171; padding: 8px 12px; border-radius: 0 6px 6px 0; margin-bottom: 6px; font-size: 13px; color: #fca5a5; }
+  .sentiment { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sentiment-item { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+  .sentiment-item .name { color: #94a3b8; }
+  .sentiment-item .val { font-weight: 600; }
+  .positive { color: #4ade80; }
+  .neutral { color: #facc15; }
+  .negative { color: #f87171; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/></svg>
+  <h1>Meeting Bot Agent</h1>
+  <span>LIVE</span>
+</header>
+
+<nav>
+  <button class="active" onclick="showPage('schedule')">🤖 Schedule Bot</button>
+  <button onclick="showPage('insights')">💡 Insights</button>
+  <button onclick="showPage('search')">🔍 Search</button>
+</nav>
+
+<!-- SCHEDULE PAGE -->
+<div id="page-schedule" class="page active">
+  <div class="card">
+    <h2>Schedule a Meeting Bot</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Meeting URL</label>
+        <input id="meeting-url" type="text" placeholder="https://zoom.us/j/..." />
+      </div>
+      <div class="form-group">
+        <label>Bot Name</label>
+        <input id="bot-name" type="text" value="Meeting Bot" />
+      </div>
+    </div>
+    <button class="btn" onclick="scheduleBot()">Join Meeting</button>
+    <div id="schedule-msg"></div>
+  </div>
+
+  <div class="card" id="live-card" style="display:none">
+    <h2>
+      <span class="live-dot"></span>
+      Live Transcript &nbsp;
+      <span id="live-bot-id" style="font-size:12px;color:#6366f1;font-family:monospace"></span>
+    </h2>
+    <div id="ws-log" class="ws-log">Connecting to live stream...</div>
+  </div>
+
+  <div class="card">
+    <h2>Recent Meetings</h2>
+    <ul class="meeting-list" id="meeting-list">
+      <li style="color:#94a3b8;font-size:13px">No meetings yet</li>
+    </ul>
+  </div>
+</div>
+
+<!-- INSIGHTS PAGE -->
+<div id="page-insights" class="page">
+  <div class="card">
+    <h2>Post-Call Insights</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Meeting ID</label>
+        <input id="insights-meeting-id" type="text" placeholder="bot_xxxxxxxxxxxxxxxx" />
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;gap:8px">
+        <button class="btn" onclick="loadInsights()">Load Insights</button>
+        <button class="btn btn-outline" onclick="generateInsights()">Generate</button>
+      </div>
+    </div>
+    <div id="insights-msg"></div>
+  </div>
+
+  <div id="insights-result" style="display:none">
+    <div class="card">
+      <div class="insight-section">
+        <h3>Summary</h3>
+        <p id="ins-summary"></p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="insight-section">
+        <h3>Key Decisions</h3>
+        <div id="ins-decisions"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="insight-section">
+        <h3>Action Items</h3>
+        <div id="ins-actions"></div>
+      </div>
+      <div class="insight-section" style="margin-top:16px">
+        <h3>Topics</h3>
+        <div id="ins-topics"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="insight-section">
+        <h3>Risks</h3>
+        <div id="ins-risks"></div>
+      </div>
+      <div class="insight-section" style="margin-top:16px">
+        <h3>Sentiment</h3>
+        <div id="ins-sentiment" class="sentiment"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SEARCH PAGE -->
+<div id="page-search" class="page">
+  <div class="card">
+    <h2>Natural Language Search</h2>
+    <div class="form-group">
+      <label>Ask anything about your meetings</label>
+      <input id="search-query" type="text" placeholder="What did we decide about the API design? Find all action items assigned to me..." onkeydown="if(event.key==='Enter')search()" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>From Date (optional)</label>
+        <input id="search-date" type="date" />
+      </div>
+      <div class="form-group">
+        <label>Speaker (optional)</label>
+        <input id="search-speaker" type="text" placeholder="Speaker name" />
+      </div>
+    </div>
+    <button class="btn" onclick="search()">Search</button>
+    <div id="search-msg"></div>
+  </div>
+
+  <div id="search-result" style="display:none">
+    <div class="card">
+      <h2>Answer</h2>
+      <div id="search-answer" class="answer-box"></div>
+      <h2 style="margin-top:16px;margin-bottom:12px">Source Excerpts</h2>
+      <div id="search-sources"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let meetings = JSON.parse(localStorage.getItem('meetings') || '[]');
+let ws = null;
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'schedule') renderMeetings();
+}
+
+function renderMeetings() {
+  const list = document.getElementById('meeting-list');
+  if (!meetings.length) { list.innerHTML = '<li style="color:#94a3b8;font-size:13px">No meetings yet</li>'; return; }
+  list.innerHTML = meetings.slice().reverse().map(m => `
+    <li class="meeting-item">
+      <div class="info">
+        <div class="id">${m.id}</div>
+        <div class="url">${m.url}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline" style="font-size:12px;padding:6px 12px" onclick="document.getElementById('insights-meeting-id').value='${m.id}';showPage('insights');document.querySelectorAll('nav button')[1].classList.add('active');document.querySelectorAll('nav button')[0].classList.remove('active')">Insights</button>
+      </div>
+    </li>`).join('');
+}
+
+async function scheduleBot() {
+  const url = document.getElementById('meeting-url').value.trim();
+  const name = document.getElementById('bot-name').value.trim() || 'Meeting Bot';
+  if (!url) { setMsg('schedule-msg', 'Please enter a meeting URL', 'error'); return; }
+
+  setMsg('schedule-msg', '<span class="spinner"></span>Joining meeting...', '');
+  try {
+    const r = await fetch(`${API}/meetings/schedule`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({meeting_url: url, bot_name: name})
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(JSON.stringify(data));
+
+    meetings.push({id: data.meeting_id, url, name});
+    localStorage.setItem('meetings', JSON.stringify(meetings));
+    renderMeetings();
+    setMsg('schedule-msg', `✅ Bot scheduled! Meeting ID: ${data.meeting_id}`, 'success');
+    connectLive(data.meeting_id);
+  } catch(e) {
+    setMsg('schedule-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+function connectLive(botId) {
+  document.getElementById('live-card').style.display = 'block';
+  document.getElementById('live-bot-id').textContent = botId;
+  const log = document.getElementById('ws-log');
+  log.innerHTML = '';
+
+  if (ws) ws.close();
+  const wsUrl = `ws://${location.host}/ws/meetings/${botId}/live`;
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => appendLog(log, '🟢 Connected to live stream');
+  ws.onmessage = (e) => {
+    const chunk = JSON.parse(e.data);
+    appendLog(log, `<span style="color:#6366f1">${chunk.speaker}:</span> ${chunk.text}`);
+  };
+  ws.onerror = () => appendLog(log, '🔴 WebSocket error');
+  ws.onclose = () => appendLog(log, '⚪ Disconnected');
+}
+
+function appendLog(el, msg) {
+  el.innerHTML += `<div>${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function loadInsights() {
+  const id = document.getElementById('insights-meeting-id').value.trim();
+  if (!id) { setMsg('insights-msg', 'Enter a meeting ID', 'error'); return; }
+  setMsg('insights-msg', '<span class="spinner"></span>Loading...', '');
+
+  try {
+    const r = await fetch(`${API}/meetings/${id}/insights`);
+    const data = await r.json();
+    if (data.status === 'not_ready') {
+      setMsg('insights-msg', 'Insights not ready. Click Generate to create them.', 'error');
+      return;
+    }
+    renderInsights(data);
+    setMsg('insights-msg', '', '');
+  } catch(e) {
+    setMsg('insights-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+async function generateInsights() {
+  const id = document.getElementById('insights-meeting-id').value.trim();
+  if (!id) { setMsg('insights-msg', 'Enter a meeting ID', 'error'); return; }
+  setMsg('insights-msg', '<span class="spinner"></span>Generating insights with AI... (may take 30s)', '');
+
+  try {
+    const r = await fetch(`${API}/meetings/${id}/insights/generate`, {method: 'POST'});
+    const data = await r.json();
+    setMsg('insights-msg', '⏳ Processing... Click Load Insights in 30 seconds.', 'success');
+  } catch(e) {
+    setMsg('insights-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+function renderInsights(d) {
+  document.getElementById('insights-result').style.display = 'block';
+  document.getElementById('ins-summary').textContent = d.summary || 'N/A';
+
+  document.getElementById('ins-decisions').innerHTML = (d.key_decisions || [])
+    .map(dec => `<div class="tag">✓ ${dec}</div>`).join('') || '<span style="color:#94a3b8;font-size:13px">None</span>';
+
+  document.getElementById('ins-actions').innerHTML = (d.action_items || [])
+    .map(a => `<div class="action-item"><span class="owner">${a.owner}</span>: ${a.task}${a.due_date ? ` <span style="color:#94a3b8">(${a.due_date})</span>` : ''}</div>`).join('') || '<span style="color:#94a3b8;font-size:13px">None</span>';
+
+  document.getElementById('ins-topics').innerHTML = (d.topics || [])
+    .map(t => `<span class="tag">${t}</span>`).join('');
+
+  document.getElementById('ins-risks').innerHTML = (d.risks || [])
+    .map(r => `<div class="risk">⚠ ${r}</div>`).join('') || '<span style="color:#94a3b8;font-size:13px">None</span>';
+
+  const sent = d.sentiment || {};
+  const overall = sent.overall || 'neutral';
+  const perSpeaker = sent.per_speaker || {};
+  document.getElementById('ins-sentiment').innerHTML =
+    `<div class="sentiment-item"><span class="name">Overall </span><span class="val ${overall}">${overall}</span></div>` +
+    Object.entries(perSpeaker).map(([name, val]) =>
+      `<div class="sentiment-item"><span class="name">${name} </span><span class="val ${val}">${val}</span></div>`
+    ).join('');
+}
+
+async function search() {
+  const q = document.getElementById('search-query').value.trim();
+  if (!q) { setMsg('search-msg', 'Enter a search query', 'error'); return; }
+  const date = document.getElementById('search-date').value;
+  const speaker = document.getElementById('search-speaker').value.trim();
+
+  setMsg('search-msg', '<span class="spinner"></span>Searching...', '');
+  let url = `${API}/search?q=${encodeURIComponent(q)}`;
+  if (date) url += `&from_date=${date}`;
+  if (speaker) url += `&speaker=${encodeURIComponent(speaker)}`;
+
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    document.getElementById('search-result').style.display = 'block';
+    document.getElementById('search-answer').textContent = data.answer || 'No answer found.';
+    document.getElementById('search-sources').innerHTML = (data.sources || []).map(s => `
+      <div class="search-result">
+        <div class="meta">📅 ${s.meeting_date || 'Unknown date'} &nbsp;·&nbsp; 🎤 ${s.speaker || 'Unknown'} &nbsp;·&nbsp; 🆔 ${s.meeting_id || ''}</div>
+        <div class="excerpt">${s.text}</div>
+      </div>`).join('') || '<div style="color:#94a3b8;font-size:13px">No source excerpts found.</div>';
+    setMsg('search-msg', '', '');
+  } catch(e) {
+    setMsg('search-msg', `Error: ${e.message}`, 'error');
+  }
+}
+
+function setMsg(id, msg, type) {
+  const el = document.getElementById(id);
+  el.innerHTML = msg;
+  el.className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+}
+
+renderMeetings();
+</script>
+</body>
+</html>
