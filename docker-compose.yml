@@ -41,10 +41,7 @@ services:
       - CREDENTIALS_ENCRYPTION_KEY=${CREDENTIALS_ENCRYPTION_KEY}
       - ZOOM_CLIENT_ID=${ZOOM_CLIENT_ID}
       - ZOOM_CLIENT_SECRET=${ZOOM_CLIENT_SECRET}
-    command: >
-      sh -c "python manage.py runserver 0.0.0.0:8000 &
-             sleep 5 && python init_credentials.py;
-             wait"
+    command: python manage.py runserver 0.0.0.0:8000
     entrypoint: []
     depends_on:
       - attendee-postgres
