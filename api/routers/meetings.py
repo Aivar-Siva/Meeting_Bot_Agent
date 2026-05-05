@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from api.db import get_db, Meeting
 from services.attendee_client import AttendeeClient
-import uuid
+from services.transcript_poller import poll_transcript
+import asyncio
 
 router = APIRouter()
 attendee = AttendeeClient()
@@ -15,12 +16,14 @@ class ScheduleRequest(BaseModel):
 
 
 @router.post("/schedule")
-def schedule(req: ScheduleRequest, db: Session = Depends(get_db)):
+async def schedule(req: ScheduleRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     bot = attendee.create_bot(req.meeting_url, req.bot_name)
     meeting = Meeting(id=bot["id"], meeting_url=req.meeting_url,
                       bot_name=req.bot_name, status="joining")
     db.add(meeting)
     db.commit()
+    # Start polling transcript in background
+    background_tasks.add_task(poll_transcript, bot["id"])
     return {"meeting_id": bot["id"], "status": "joining"}
 
 
