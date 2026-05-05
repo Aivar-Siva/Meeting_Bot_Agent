@@ -68,6 +68,9 @@ async def chat(req: ChatRequest):
                                 yield f"data: {json.dumps({'token': token})}\n\n"
                         except Exception:
                             pass
+        # Send sources as final event
+        if chunks:
+            yield f"data: {json.dumps({'sources': chunks})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")

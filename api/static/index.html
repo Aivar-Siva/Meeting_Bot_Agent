@@ -72,6 +72,10 @@
   .chat-user { align-self: flex-end; background: #6366f1; color: #fff; border-bottom-right-radius: 4px; }
   .chat-bot { align-self: flex-start; background: #1e293b; color: #e2e8f0; border-bottom-left-radius: 4px; }
   .chat-typing { color: #6366f1; font-size: 20px; letter-spacing: 4px; }
+  .source-bubbles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .source-bubble { position: relative; background: #1e293b; border: 1px solid #6366f1; border-radius: 99px; padding: 3px 10px; font-size: 11px; color: #6366f1; cursor: pointer; }
+  .source-bubble:hover .source-tooltip { display: block; }
+  .source-tooltip { display: none; position: absolute; bottom: 130%; left: 0; background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #e2e8f0; width: 280px; line-height: 1.5; z-index: 100; white-space: normal; }
 </style>
 </head>
 <body>
@@ -398,12 +402,12 @@ async function sendChat() {
   chatHistory.push({role: 'user', content: q});
   appendChatBubble('user', q);
 
-  // Typing indicator
   const typingId = 'typing-' + Date.now();
   const typingEl = appendChatBubble('bot', '...', typingId);
   typingEl.classList.add('chat-typing');
 
   let fullText = '';
+  let sources = [];
   try {
     const r = await fetch('/chat', {
       method: 'POST',
@@ -421,17 +425,33 @@ async function sendChat() {
       if (done) break;
       const lines = decoder.decode(value).split('\n');
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
-          try {
-            const chunk = JSON.parse(data);
-            fullText += chunk.token || '';
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') break;
+        try {
+          const chunk = JSON.parse(data);
+          if (chunk.token) {
+            fullText += chunk.token;
             typingEl.textContent = fullText;
             document.getElementById('chat-messages').scrollTop = 999999;
-          } catch(e) {}
-        }
+          }
+          if (chunk.sources) sources = chunk.sources;
+        } catch(e) {}
       }
+    }
+
+    // Render source bubbles
+    if (sources.length) {
+      const bubblesDiv = document.createElement('div');
+      bubblesDiv.className = 'source-bubbles';
+      sources.forEach((s, i) => {
+        const b = document.createElement('div');
+        b.className = 'source-bubble';
+        b.innerHTML = `📎 ${s.speaker || 'Source'} ${i+1}
+          <div class="source-tooltip"><strong>${s.speaker}</strong> · ${s.meeting_date}<br/>${s.text}</div>`;
+        bubblesDiv.appendChild(b);
+      });
+      typingEl.appendChild(bubblesDiv);
     }
   } catch(e) {
     typingEl.textContent = 'Error: ' + e.message;
