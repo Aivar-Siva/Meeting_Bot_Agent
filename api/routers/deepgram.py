@@ -8,9 +8,12 @@ router = APIRouter()
 @router.post("/callback")
 async def deepgram_callback(request: Request, background_tasks: BackgroundTasks):
     body = await request.json()
-    meeting_id = request.query_params.get("bot_id", "unknown")
 
-    # Extract transcript chunk from Deepgram Results event
+    # Deepgram puts our metadata in body["metadata"]
+    metadata = body.get("metadata", {})
+    meeting_id = metadata.get("bot_id", request.query_params.get("bot_id", "unknown"))
+
+    # Only process final transcript results
     if body.get("type") != "Results":
         return {"ok": True}
 
@@ -19,7 +22,6 @@ async def deepgram_callback(request: Request, background_tasks: BackgroundTasks)
     if not transcript:
         return {"ok": True}
 
-    # Get speaker index from first word
     words = alt.get("words", [])
     speaker_index = str(words[0].get("speaker", 0)) if words else "0"
     start_ms = int(words[0].get("start", 0) * 1000) if words else 0
