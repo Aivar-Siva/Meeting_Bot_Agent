@@ -6,15 +6,13 @@ class AttendeeClient:
         self.headers = {"Authorization": f"Token {os.environ['ATTENDEE_API_KEY']}"}
 
     def create_bot(self, meeting_url: str, bot_name: str) -> dict:
-        ec2_ip = os.environ.get("EC2_PUBLIC_IP", "localhost")
-        callback_url = f"http://{ec2_ip}:8000/deepgram/callback"
         r = requests.post(f"{self.base}/api/v1/bots",
                           json={
                               "meeting_url": meeting_url,
                               "bot_name": bot_name,
                               "transcription_settings": {
                                   "deepgram": {
-                                      "callback": callback_url
+                                      "language": "multi"
                                   }
                               }
                           },
