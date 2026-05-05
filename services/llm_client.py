@@ -6,18 +6,25 @@ SEARCH_MODEL = "us.meta.llama3-3-70b-instruct-v1:0"
 
 
 async def chat(prompt: str, model: str = SEARCH_MODEL, max_tokens: int = 1024) -> str:
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(LAMBDA_URL, json={
+    """Call Bedrock Lambda proxy and collect SSE streaming response."""
+    import json
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        async with client.stream("POST", LAMBDA_URL, json={
             "model_id": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-        })
-        r.raise_for_status()
-        data = r.json()
-        # Handle both response formats from the proxy
-        if "content" in data:
-            return data["content"][0]["text"]
-        return data.get("generation", data.get("output", ""))
+            "prompt": prompt,
+            "max_gen_len": max_tokens,
+        }) as r:
+            r.raise_for_status()
+            text = ""
+            async for line in r.aiter_lines():
+                if line.startswith("data: "):
+                    try:
+                        chunk = json.loads(line[6:])
+                        text += chunk.get("generation", "")
+                    except Exception:
+                        pass
+            return text.strip()
 
 
 async def chat_insights(prompt: str) -> str:
