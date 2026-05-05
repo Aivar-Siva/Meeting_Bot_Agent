@@ -32,7 +32,7 @@ async def _get_context(query: str, meeting_id: str = None):
 
 
 def _build_prompt(messages: List[Message], context: str) -> str:
-    system = "You are a meeting assistant. Answer questions about meetings concisely in 2-3 sentences."
+    system = "You are a meeting assistant. Answer questions about meetings in 2-3 sentences. Always end your answer with 'Source: [meeting_id]' citing the meeting ID from the context."
     if context:
         system += f"\n\nRelevant meeting context:\n{context}"
 
