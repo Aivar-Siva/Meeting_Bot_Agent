@@ -3,6 +3,7 @@ set -e
 
 # Auto-restore credentials from env vars on every start
 python manage.py shell -c "
+import time; time.sleep(2)
 from bots.models import Credentials, Project
 import os
 p = Project.objects.first()
